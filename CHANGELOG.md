@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows Semantic Versioning.
 
+## [0.1.2] - 2026-02-27
+
+### Fixed
+
+- Added `package-lock.json` so GitHub Actions npm cache works reliably
+- Restored CI/Release workflow compatibility for tagged builds
+
 ## [0.1.1] - 2026-02-27
 
 ### Added
