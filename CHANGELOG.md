@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows Semantic Versioning.
 
+## [0.3.0] - 2026-02-27
+
+### Added
+
+- `ccws standup` command for session-by-session progress summaries
+- `--files` option to control how many changed files are shown per session
+- Standup reporting of last commit and working tree change counts
+
 ## [0.2.0] - 2026-02-27
 
 ### Added

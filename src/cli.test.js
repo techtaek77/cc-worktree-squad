@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   parseArgs,
   parseWorktreePorcelain,
+  parseGitStatusPorcelain,
   normalizeSessionName,
   renderTemplate
 } = require("./cli");
@@ -47,6 +48,13 @@ test("parseArgs handles squad command and list positionals", () => {
   assert.equal(parsed.options["tmux-cmd"], "claude");
 });
 
+test("parseArgs handles standup command options", () => {
+  const parsed = parseArgs(["standup", "--files", "5"]);
+
+  assert.equal(parsed.command, "standup");
+  assert.equal(parsed.options.files, "5");
+});
+
 test("parseWorktreePorcelain parses entries", () => {
   const text = [
     "worktree /repo",
@@ -63,6 +71,16 @@ test("parseWorktreePorcelain parses entries", () => {
   assert.equal(entries.length, 2);
   assert.equal(entries[1].worktree, "/repo/.ccws/worktrees/bugfix-auth");
   assert.equal(entries[1].branch, "codex/bugfix-auth-20260226-2200");
+});
+
+test("parseGitStatusPorcelain summarizes changes", () => {
+  const parsed = parseGitStatusPorcelain(["M  src/a.js", " M src/b.js", "?? new.txt"].join("\n"));
+
+  assert.equal(parsed.staged, 1);
+  assert.equal(parsed.unstaged, 1);
+  assert.equal(parsed.untracked, 1);
+  assert.equal(parsed.totalChanges, 3);
+  assert.deepEqual(parsed.files, ["src/a.js", "src/b.js", "new.txt"]);
 });
 
 test("normalizeSessionName creates safe slugs", () => {

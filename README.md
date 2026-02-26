@@ -18,6 +18,7 @@ It helps you run multiple coding threads in one repository without branch collis
 - `init`: Bootstraps `.ccws/` config in your current Git repository
 - `spawn`: Creates a dedicated worktree + branch + `SESSION_BRIEF.md`
 - `squad`: Creates multiple worktrees and launches a tiled tmux board
+- `standup`: Prints per-session progress summary for quick check-ins
 - `status`: Shows currently managed worktrees
 - `teardown`: Removes a worktree and optionally deletes its branch
 
@@ -35,6 +36,7 @@ ccws init
 ccws spawn bugfix-auth
 ccws spawn feature-docs --tmux
 ccws squad api ui docs --session my-board
+ccws standup
 ccws status
 ccws teardown bugfix-auth --delete-branch
 ```
@@ -45,6 +47,7 @@ ccws teardown bugfix-auth --delete-branch
 ccws init [--force]
 ccws spawn <name> [--base <branch>] [--branch <name>] [--tmux] [--tmux-cmd <command>] [--dry-run]
 ccws squad <name...> [--base <branch>] [--session <tmux-name>] [--tmux-cmd <command>] [--dry-run]
+ccws standup [--files <count>]
 ccws status
 ccws teardown <name> [--delete-branch] [--safe] [--dry-run]
 ```
@@ -95,6 +98,21 @@ tmux attach -t feature-squad
 ```
 
 Each pane starts in its own worktree and runs `claude`.
+
+## Standup mode (progress summary)
+
+Get a quick progress report across all managed sessions:
+
+```bash
+ccws standup
+ccws standup --files 5
+```
+
+Output includes:
+
+- Last commit per session
+- Working tree change counts (staged, unstaged, untracked)
+- Top changed files
 
 ## Generated structure
 

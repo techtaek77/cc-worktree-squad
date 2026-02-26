@@ -45,6 +45,9 @@ function main(argv) {
       case "list":
         commandStatus();
         break;
+      case "standup":
+        commandStandup(options);
+        break;
       case "teardown":
       case "rm":
         commandTeardown(positionals[0], options);
@@ -254,6 +257,55 @@ function commandStatus() {
   }
 }
 
+function commandStandup(options) {
+  const repoRoot = getRepoRoot(process.cwd());
+  const config = readConfig(repoRoot);
+  const sessions = readSessions(path.join(repoRoot, config.sessionsDir))
+    .slice()
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  if (sessions.length === 0) {
+    console.log("No sessions found. Create one with `ccws spawn <name>` first.");
+    return;
+  }
+
+  const maxFiles = getNumberOption(options, "files", 3);
+  const now = new Date().toISOString();
+
+  console.log(`Standup Report (${now})`);
+  console.log(`Repo: ${repoRoot}`);
+  console.log(`Sessions: ${sessions.length}`);
+
+  for (const session of sessions) {
+    const report = summarizeSession(session, maxFiles);
+    console.log("");
+    console.log(`## ${session.name} (${session.branch})`);
+    console.log(`Path: ${relativeToRepo(repoRoot, session.worktreePath)}`);
+
+    if (!report.exists) {
+      console.log("State: missing worktree path");
+      continue;
+    }
+    if (report.error) {
+      console.log(`State: error (${report.error})`);
+      continue;
+    }
+
+    console.log(`Last commit: ${report.lastCommit || "-"}`);
+    if (report.totalChanges === 0) {
+      console.log("Changes: clean");
+      continue;
+    }
+
+    console.log(
+      `Changes: ${report.totalChanges} files (staged ${report.staged}, unstaged ${report.unstaged}, untracked ${report.untracked})`
+    );
+    if (report.topFiles.length > 0) {
+      console.log(`Top files: ${report.topFiles.join(", ")}`);
+    }
+  }
+}
+
 function commandTeardown(rawName, options) {
   if (!rawName) {
     throw new Error("Session name is required. Example: ccws teardown bugfix-auth");
@@ -318,6 +370,7 @@ Usage:
   ccws spawn <name> [--base <branch>] [--branch <name>] [--tmux] [--tmux-cmd <command>] [--dry-run]
   ccws squad <name...> [--base <branch>] [--session <tmux-name>] [--tmux-cmd <command>] [--dry-run]
   ccws status
+  ccws standup [--files <count>]
   ccws teardown <name> [--delete-branch] [--safe] [--dry-run]
 
 Notes:
@@ -325,6 +378,7 @@ Notes:
   - Branch prefix defaults to "codex/".
   - Use --tmux to launch a detached tmux session automatically.
   - Use squad for one-command multi-worktree + multi-pane tmux boards.
+  - Use standup for session-by-session change summaries.
   - teardown uses --force by default (use --safe to disable).
 `);
 }
@@ -516,6 +570,44 @@ function parseWorktreePorcelain(text) {
   return entries;
 }
 
+function parseGitStatusPorcelain(text) {
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const files = [];
+  let staged = 0;
+  let unstaged = 0;
+  let untracked = 0;
+
+  for (const line of lines) {
+    if (line.startsWith("?? ")) {
+      untracked += 1;
+      files.push(line.slice(3).trim());
+      continue;
+    }
+
+    if (line.length < 4) {
+      continue;
+    }
+
+    const x = line[0];
+    const y = line[1];
+    if (x !== " " && x !== "?") {
+      staged += 1;
+    }
+    if (y !== " " && y !== "?") {
+      unstaged += 1;
+    }
+    files.push(line.slice(3).trim());
+  }
+
+  return {
+    staged,
+    unstaged,
+    untracked,
+    totalChanges: lines.length,
+    files
+  };
+}
+
 function relativeToRepo(repoRoot, targetPath) {
   return path.relative(repoRoot, targetPath) || ".";
 }
@@ -633,6 +725,39 @@ function startTmuxSquadSession(sessionName, sessions, command) {
   }
 }
 
+function summarizeSession(session, maxFiles) {
+  if (!fs.existsSync(session.worktreePath)) {
+    return { exists: false };
+  }
+
+  const statusResult = runGit(["-C", session.worktreePath, "status", "--porcelain"], {
+    allowFailure: true
+  });
+  if (statusResult.status !== 0) {
+    return {
+      exists: true,
+      error: (statusResult.stderr || "failed to read git status").trim()
+    };
+  }
+
+  const parsed = parseGitStatusPorcelain(statusResult.stdout || "");
+  const commitResult = runGit(
+    ["-C", session.worktreePath, "log", "-1", "--pretty=format:%h %cr %s"],
+    { allowFailure: true }
+  );
+
+  return {
+    exists: true,
+    error: null,
+    lastCommit: commitResult.status === 0 ? (commitResult.stdout || "").trim() : null,
+    staged: parsed.staged,
+    unstaged: parsed.unstaged,
+    untracked: parsed.untracked,
+    totalChanges: parsed.totalChanges,
+    topFiles: parsed.files.slice(0, Math.max(0, maxFiles))
+  };
+}
+
 function isExecutableAvailable(bin) {
   const result = spawnSync(bin, ["--version"], { encoding: "utf8" });
   return !result.error;
@@ -674,6 +799,17 @@ function getBooleanOption(options, key) {
   return String(options[key]).toLowerCase() === "true";
 }
 
+function getNumberOption(options, key, fallback) {
+  if (!options || !Object.prototype.hasOwnProperty.call(options, key)) {
+    return fallback;
+  }
+  const value = Number(options[key]);
+  if (!Number.isFinite(value) || value < 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
 function fail(message) {
   console.error(`Error: ${message}`);
 }
@@ -682,7 +818,9 @@ module.exports = {
   main,
   parseArgs,
   parseWorktreePorcelain,
+  parseGitStatusPorcelain,
   normalizeSessionName,
   renderTemplate,
-  createSession
+  createSession,
+  summarizeSession
 };
