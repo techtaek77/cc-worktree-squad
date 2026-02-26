@@ -1,0 +1,31 @@
+{
+  "name": "cc-worktree-squad",
+  "version": "0.1.0",
+  "description": "CLI to manage parallel Git worktrees for Claude Code sessions",
+  "type": "commonjs",
+  "bin": {
+    "ccws": "./bin/ccws.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "release:check": "npm test && node bin/ccws.js --help"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "git-worktree",
+    "developer-tools",
+    "automation"
+  ],
+  "author": "Taek Park <techtaek77@gmail.com>",
+  "license": "MIT",
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ]
+}
