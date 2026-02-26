@@ -30,6 +30,23 @@ test("parseArgs handles flags and key-values", () => {
   assert.equal(parsed.options.branch, "codex/my-session");
 });
 
+test("parseArgs handles squad command and list positionals", () => {
+  const parsed = parseArgs([
+    "squad",
+    "api",
+    "ui",
+    "docs",
+    "--session",
+    "my-board",
+    "--tmux-cmd=claude"
+  ]);
+
+  assert.equal(parsed.command, "squad");
+  assert.deepEqual(parsed.positionals, ["api", "ui", "docs"]);
+  assert.equal(parsed.options.session, "my-board");
+  assert.equal(parsed.options["tmux-cmd"], "claude");
+});
+
 test("parseWorktreePorcelain parses entries", () => {
   const text = [
     "worktree /repo",

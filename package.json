@@ -1,6 +1,6 @@
 {
   "name": "cc-worktree-squad",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "CLI to manage parallel Git worktrees for Claude Code sessions",
   "type": "commonjs",
   "bin": {

@@ -37,6 +37,10 @@ function main(argv) {
       case "spawn":
         commandSpawn(positionals[0], options);
         break;
+      case "squad":
+      case "board":
+        commandSquad(positionals, options);
+        break;
       case "status":
       case "list":
         commandStatus();
@@ -104,70 +108,41 @@ function commandSpawn(rawName, options) {
     throw new Error("Session name is required. Example: ccws spawn bugfix-auth");
   }
 
-  const name = normalizeSessionName(rawName);
   const repoRoot = getRepoRoot(process.cwd());
   const config = readConfig(repoRoot);
+  const name = normalizeSessionName(rawName);
 
   ensureDir(path.join(repoRoot, config.workspaceDir));
   ensureDir(path.join(repoRoot, config.sessionsDir));
 
   const baseBranch = options.base || config.defaultBaseBranch;
-  ensureBaseBranchExists(repoRoot, baseBranch);
-
-  const branch = options.branch || `${config.branchPrefix}${name}-${timestampSlug()}`;
-  if (branchExists(repoRoot, branch)) {
-    throw new Error(`Branch already exists: ${branch}`);
-  }
-
-  const worktreePath = path.join(repoRoot, config.workspaceDir, name);
-  if (fs.existsSync(worktreePath)) {
-    throw new Error(`Worktree path already exists: ${worktreePath}`);
-  }
 
   const dryRun = getBooleanOption(options, "dry-run");
   const useTmux = getBooleanOption(options, "tmux");
   const tmuxCommand = options["tmux-cmd"] || "claude";
+  const session = createSession(repoRoot, config, name, {
+    baseBranch,
+    branch: options.branch,
+    dryRun
+  });
+
   if (dryRun) {
-    console.log("[dry-run] Would run:");
-    console.log(`git worktree add -b ${branch} ${worktreePath} ${baseBranch}`);
     if (useTmux) {
       console.log(
-        `[dry-run] Would run: tmux new-session -d -s ${name} -c "${worktreePath}" "${tmuxCommand}"`
+        `[dry-run] Would run: tmux new-session -d -s ${name} -c "${session.worktreePath}" "${tmuxCommand}"`
       );
     }
     return;
   }
 
-  runGit(["worktree", "add", "-b", branch, worktreePath, baseBranch], { cwd: repoRoot });
-
-  const createdAt = new Date().toISOString();
-  const brief = renderTemplate(loadTemplate(repoRoot, config), {
-    session_name: name,
-    branch,
-    base_branch: baseBranch,
-    worktree_path: worktreePath,
-    created_at: createdAt
-  });
-  fs.writeFileSync(path.join(worktreePath, "SESSION_BRIEF.md"), brief, "utf8");
-
-  const session = {
-    schemaVersion: 1,
-    name,
-    branch,
-    baseBranch,
-    worktreePath,
-    createdAt
-  };
-  writeJson(path.join(repoRoot, config.sessionsDir, `${name}.json`), session);
-
   console.log("Session created.");
   console.log(`- Name: ${name}`);
-  console.log(`- Branch: ${branch}`);
+  console.log(`- Branch: ${session.branch}`);
   console.log(`- Base: ${baseBranch}`);
-  console.log(`- Worktree: ${worktreePath}`);
+  console.log(`- Worktree: ${session.worktreePath}`);
 
   if (useTmux) {
-    startTmuxSession(name, worktreePath, tmuxCommand);
+    startTmuxSession(name, session.worktreePath, tmuxCommand);
     console.log(`- tmux: launched session "${name}"`);
   }
 
@@ -176,12 +151,78 @@ function commandSpawn(rawName, options) {
   if (useTmux) {
     console.log(`tmux attach -t ${name}`);
   } else {
-    console.log(`cd "${worktreePath}"`);
+    console.log(`cd "${session.worktreePath}"`);
     console.log("claude");
     console.log("");
     console.log("tmux optional:");
-    console.log(`tmux new -s ${name} -c "${worktreePath}" "claude"`);
+    console.log(`tmux new -s ${name} -c "${session.worktreePath}" "claude"`);
   }
+}
+
+function commandSquad(rawNames, options) {
+  const names = (rawNames || []).map((name) => normalizeSessionName(name)).filter(Boolean);
+  if (names.length === 0) {
+    throw new Error("At least one session name is required. Example: ccws squad api ui");
+  }
+
+  const uniqueNames = [...new Set(names)];
+  if (uniqueNames.length !== names.length) {
+    throw new Error("Session names must be unique in squad mode.");
+  }
+
+  if (options.branch && names.length > 1) {
+    throw new Error("`--branch` is only supported with one squad session.");
+  }
+
+  const repoRoot = getRepoRoot(process.cwd());
+  const config = readConfig(repoRoot);
+  const baseBranch = options.base || config.defaultBaseBranch;
+  const dryRun = getBooleanOption(options, "dry-run");
+  const tmuxCommand = options["tmux-cmd"] || "claude";
+  const tmuxSessionName = normalizeSessionName(options.session || `squad-${timestampSlug()}`);
+
+  if (!tmuxSessionName) {
+    throw new Error("Invalid tmux session name. Try `--session squad-dev`.");
+  }
+
+  const sessions = uniqueNames.map((name) =>
+    createSession(repoRoot, config, name, {
+      baseBranch,
+      branch: uniqueNames.length === 1 ? options.branch : undefined,
+      dryRun
+    })
+  );
+
+  if (dryRun) {
+    for (const session of sessions) {
+      console.log(
+        `[dry-run] Would run: git worktree add -b ${session.branch} ${session.worktreePath} ${session.baseBranch}`
+      );
+    }
+    console.log(
+      `[dry-run] Would run: tmux new-session -d -s ${tmuxSessionName} -c "${sessions[0].worktreePath}" "${tmuxCommand}"`
+    );
+    for (let i = 1; i < sessions.length; i += 1) {
+      console.log(
+        `[dry-run] Would run: tmux split-window -t ${tmuxSessionName}:0 -c "${sessions[i].worktreePath}" "${tmuxCommand}"`
+      );
+    }
+    if (sessions.length > 1) {
+      console.log(`[dry-run] Would run: tmux select-layout -t ${tmuxSessionName}:0 tiled`);
+    }
+    return;
+  }
+
+  startTmuxSquadSession(tmuxSessionName, sessions, tmuxCommand);
+
+  console.log("Squad created.");
+  console.log(`- tmux session: ${tmuxSessionName}`);
+  for (const session of sessions) {
+    console.log(`- ${session.name} | ${session.branch} | ${session.worktreePath}`);
+  }
+  console.log("");
+  console.log("Next:");
+  console.log(`tmux attach -t ${tmuxSessionName}`);
 }
 
 function commandStatus() {
@@ -275,6 +316,7 @@ function printHelp() {
 Usage:
   ccws init [--force]
   ccws spawn <name> [--base <branch>] [--branch <name>] [--tmux] [--tmux-cmd <command>] [--dry-run]
+  ccws squad <name...> [--base <branch>] [--session <tmux-name>] [--tmux-cmd <command>] [--dry-run]
   ccws status
   ccws teardown <name> [--delete-branch] [--safe] [--dry-run]
 
@@ -282,6 +324,7 @@ Notes:
   - Run commands from inside a Git repository.
   - Branch prefix defaults to "codex/".
   - Use --tmux to launch a detached tmux session automatically.
+  - Use squad for one-command multi-worktree + multi-pane tmux boards.
   - teardown uses --force by default (use --safe to disable).
 `);
 }
@@ -496,6 +539,57 @@ function timestampSlug() {
   return `${yyyy}${mm}${dd}-${hh}${min}`;
 }
 
+function createSession(repoRoot, config, rawName, options = {}) {
+  const name = normalizeSessionName(rawName);
+  if (!name) {
+    throw new Error(`Invalid session name: ${rawName}`);
+  }
+
+  ensureDir(path.join(repoRoot, config.workspaceDir));
+  ensureDir(path.join(repoRoot, config.sessionsDir));
+
+  const baseBranch = options.baseBranch || config.defaultBaseBranch;
+  ensureBaseBranchExists(repoRoot, baseBranch);
+
+  const branch = options.branch || `${config.branchPrefix}${name}-${timestampSlug()}`;
+  if (branchExists(repoRoot, branch)) {
+    throw new Error(`Branch already exists: ${branch}`);
+  }
+
+  const worktreePath = path.join(repoRoot, config.workspaceDir, name);
+  if (fs.existsSync(worktreePath)) {
+    throw new Error(`Worktree path already exists: ${worktreePath}`);
+  }
+
+  const createdAt = new Date().toISOString();
+  const session = {
+    schemaVersion: 1,
+    name,
+    branch,
+    baseBranch,
+    worktreePath,
+    createdAt
+  };
+
+  if (options.dryRun) {
+    return session;
+  }
+
+  runGit(["worktree", "add", "-b", branch, worktreePath, baseBranch], { cwd: repoRoot });
+
+  const brief = renderTemplate(loadTemplate(repoRoot, config), {
+    session_name: name,
+    branch,
+    base_branch: baseBranch,
+    worktree_path: worktreePath,
+    created_at: createdAt
+  });
+  fs.writeFileSync(path.join(worktreePath, "SESSION_BRIEF.md"), brief, "utf8");
+  writeJson(path.join(repoRoot, config.sessionsDir, `${name}.json`), session);
+
+  return session;
+}
+
 function runGit(args, options = {}) {
   return run("git", args, options);
 }
@@ -513,6 +607,30 @@ function startTmuxSession(sessionName, cwd, command) {
   }
 
   run("tmux", ["new-session", "-d", "-s", sessionName, "-c", cwd, command]);
+}
+
+function startTmuxSquadSession(sessionName, sessions, command) {
+  if (!sessions.length) {
+    throw new Error("No sessions to launch.");
+  }
+  if (!isExecutableAvailable("tmux")) {
+    throw new Error("tmux is not installed. Install tmux first to use squad mode.");
+  }
+
+  const hasSession = run("tmux", ["has-session", "-t", sessionName], {
+    allowFailure: true
+  });
+  if (hasSession.status === 0) {
+    throw new Error(`tmux session already exists: ${sessionName}`);
+  }
+
+  run("tmux", ["new-session", "-d", "-s", sessionName, "-c", sessions[0].worktreePath, command]);
+  for (let i = 1; i < sessions.length; i += 1) {
+    run("tmux", ["split-window", "-t", `${sessionName}:0`, "-c", sessions[i].worktreePath, command]);
+  }
+  if (sessions.length > 1) {
+    run("tmux", ["select-layout", "-t", `${sessionName}:0`, "tiled"]);
+  }
 }
 
 function isExecutableAvailable(bin) {
@@ -565,5 +683,6 @@ module.exports = {
   parseArgs,
   parseWorktreePorcelain,
   normalizeSessionName,
-  renderTemplate
+  renderTemplate,
+  createSession
 };

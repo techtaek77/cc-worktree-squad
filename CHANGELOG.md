@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows Semantic Versioning.
 
+## [0.2.0] - 2026-02-27
+
+### Added
+
+- `ccws squad <name...>` command for one-shot multi-worktree creation
+- Automatic tiled tmux board launch for squad sessions
+- `--session` option to set custom tmux board name
+
 ## [0.1.2] - 2026-02-27
 
 ### Fixed

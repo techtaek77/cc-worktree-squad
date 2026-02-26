@@ -17,6 +17,7 @@ It helps you run multiple coding threads in one repository without branch collis
 
 - `init`: Bootstraps `.ccws/` config in your current Git repository
 - `spawn`: Creates a dedicated worktree + branch + `SESSION_BRIEF.md`
+- `squad`: Creates multiple worktrees and launches a tiled tmux board
 - `status`: Shows currently managed worktrees
 - `teardown`: Removes a worktree and optionally deletes its branch
 
@@ -33,6 +34,7 @@ Then from any Git repo:
 ccws init
 ccws spawn bugfix-auth
 ccws spawn feature-docs --tmux
+ccws squad api ui docs --session my-board
 ccws status
 ccws teardown bugfix-auth --delete-branch
 ```
@@ -42,6 +44,7 @@ ccws teardown bugfix-auth --delete-branch
 ```bash
 ccws init [--force]
 ccws spawn <name> [--base <branch>] [--branch <name>] [--tmux] [--tmux-cmd <command>] [--dry-run]
+ccws squad <name...> [--base <branch>] [--session <tmux-name>] [--tmux-cmd <command>] [--dry-run]
 ccws status
 ccws teardown <name> [--delete-branch] [--safe] [--dry-run]
 ```
@@ -81,6 +84,17 @@ Use a custom startup command:
 ```bash
 ccws spawn fix-parser --tmux --tmux-cmd "claude"
 ```
+
+## Squad mode (multi-agent board)
+
+Create multiple worktrees and launch all of them in one tiled tmux session:
+
+```bash
+ccws squad api ui docs --session feature-squad
+tmux attach -t feature-squad
+```
+
+Each pane starts in its own worktree and runs `claude`.
 
 ## Generated structure
 
