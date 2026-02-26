@@ -15,6 +15,9 @@ test("parseArgs handles flags and key-values", () => {
     "--base",
     "main",
     "--dry-run",
+    "--tmux",
+    "--tmux-cmd",
+    "claude --dangerously-skip-permissions",
     "--branch=codex/my-session"
   ]);
 
@@ -22,6 +25,8 @@ test("parseArgs handles flags and key-values", () => {
   assert.deepEqual(parsed.positionals, ["My Session"]);
   assert.equal(parsed.options.base, "main");
   assert.equal(parsed.options["dry-run"], true);
+  assert.equal(parsed.options.tmux, true);
+  assert.equal(parsed.options["tmux-cmd"], "claude --dangerously-skip-permissions");
   assert.equal(parsed.options.branch, "codex/my-session");
 });
 

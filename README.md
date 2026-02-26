@@ -1,5 +1,9 @@
 # cc-worktree-squad
 
+[![CI](https://github.com/techtaek77/cc-worktree-squad/actions/workflows/ci.yml/badge.svg)](https://github.com/techtaek77/cc-worktree-squad/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/techtaek77/cc-worktree-squad?display_name=tag)](https://github.com/techtaek77/cc-worktree-squad/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/techtaek77/cc-worktree-squad/blob/main/LICENSE)
+
 Parallel worktree launcher for Claude Code sessions.
 
 It helps you run multiple coding threads in one repository without branch collisions or folder chaos.
@@ -28,6 +32,7 @@ Then from any Git repo:
 ```bash
 ccws init
 ccws spawn bugfix-auth
+ccws spawn feature-docs --tmux
 ccws status
 ccws teardown bugfix-auth --delete-branch
 ```
@@ -36,7 +41,7 @@ ccws teardown bugfix-auth --delete-branch
 
 ```bash
 ccws init [--force]
-ccws spawn <name> [--base <branch>] [--branch <name>] [--dry-run]
+ccws spawn <name> [--base <branch>] [--branch <name>] [--tmux] [--tmux-cmd <command>] [--dry-run]
 ccws status
 ccws teardown <name> [--delete-branch] [--safe] [--dry-run]
 ```
@@ -60,6 +65,21 @@ If you want strict safety mode (fail on dirty worktree), use:
 
 ```bash
 ccws teardown bugfix-auth --safe
+```
+
+## Spawn with tmux
+
+Use `--tmux` to create a detached tmux session automatically:
+
+```bash
+ccws spawn fix-parser --tmux
+tmux attach -t fix-parser
+```
+
+Use a custom startup command:
+
+```bash
+ccws spawn fix-parser --tmux --tmux-cmd "claude"
 ```
 
 ## Generated structure

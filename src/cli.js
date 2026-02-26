@@ -125,9 +125,16 @@ function commandSpawn(rawName, options) {
   }
 
   const dryRun = getBooleanOption(options, "dry-run");
+  const useTmux = getBooleanOption(options, "tmux");
+  const tmuxCommand = options["tmux-cmd"] || "claude";
   if (dryRun) {
     console.log("[dry-run] Would run:");
     console.log(`git worktree add -b ${branch} ${worktreePath} ${baseBranch}`);
+    if (useTmux) {
+      console.log(
+        `[dry-run] Would run: tmux new-session -d -s ${name} -c "${worktreePath}" "${tmuxCommand}"`
+      );
+    }
     return;
   }
 
@@ -158,13 +165,23 @@ function commandSpawn(rawName, options) {
   console.log(`- Branch: ${branch}`);
   console.log(`- Base: ${baseBranch}`);
   console.log(`- Worktree: ${worktreePath}`);
+
+  if (useTmux) {
+    startTmuxSession(name, worktreePath, tmuxCommand);
+    console.log(`- tmux: launched session "${name}"`);
+  }
+
   console.log("");
   console.log("Next:");
-  console.log(`cd "${worktreePath}"`);
-  console.log("claude");
-  console.log("");
-  console.log("tmux optional:");
-  console.log(`tmux new -s ${name} -c "${worktreePath}" "claude"`);
+  if (useTmux) {
+    console.log(`tmux attach -t ${name}`);
+  } else {
+    console.log(`cd "${worktreePath}"`);
+    console.log("claude");
+    console.log("");
+    console.log("tmux optional:");
+    console.log(`tmux new -s ${name} -c "${worktreePath}" "claude"`);
+  }
 }
 
 function commandStatus() {
@@ -257,13 +274,14 @@ function printHelp() {
 
 Usage:
   ccws init [--force]
-  ccws spawn <name> [--base <branch>] [--branch <name>] [--dry-run]
+  ccws spawn <name> [--base <branch>] [--branch <name>] [--tmux] [--tmux-cmd <command>] [--dry-run]
   ccws status
   ccws teardown <name> [--delete-branch] [--safe] [--dry-run]
 
 Notes:
   - Run commands from inside a Git repository.
   - Branch prefix defaults to "codex/".
+  - Use --tmux to launch a detached tmux session automatically.
   - teardown uses --force by default (use --safe to disable).
 `);
 }
@@ -480,6 +498,26 @@ function timestampSlug() {
 
 function runGit(args, options = {}) {
   return run("git", args, options);
+}
+
+function startTmuxSession(sessionName, cwd, command) {
+  if (!isExecutableAvailable("tmux")) {
+    throw new Error("tmux is not installed. Remove --tmux or install tmux first.");
+  }
+
+  const hasSession = run("tmux", ["has-session", "-t", sessionName], {
+    allowFailure: true
+  });
+  if (hasSession.status === 0) {
+    throw new Error(`tmux session already exists: ${sessionName}`);
+  }
+
+  run("tmux", ["new-session", "-d", "-s", sessionName, "-c", cwd, command]);
+}
+
+function isExecutableAvailable(bin) {
+  const result = spawnSync(bin, ["--version"], { encoding: "utf8" });
+  return !result.error;
 }
 
 function run(bin, args, options = {}) {
